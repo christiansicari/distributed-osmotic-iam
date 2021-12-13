@@ -6,14 +6,15 @@ var { SuperLogin } = require('@sl-nx/superlogin-next');
 const nano = require('nano')('http://admin:Fcrlab2021!@pi1:5984');
 
 const axios = require("axios");
+const {parseHost} = require("express-http-proxy/lib/requestOptions");
 
 var app = express();
 app.set('port', process.env.PORT || 3000);
 app.use(logger('dev'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
-var port = 8080;
-var config = {
+const port = 8080;
+const config = {
     dbServer: {
         protocol: 'http://',
         host: 'pi1:5984',
@@ -40,12 +41,11 @@ var config = {
     }
 }
 
-
-async function update_permission(path, roles)
+async function update_service(deployment, host, port, path, roles)
 {
     const q = {
         selector: {
-            path: path
+            deployment: deployment
         },
         limit: 1
     };
@@ -54,29 +54,32 @@ async function update_permission(path, roles)
 
     const doc = response.docs[0]
     console.log(doc)
-    doc.roles = roles
+    doc.roles = roles || doc.roles
+    doc.host = host || doc.host
+    doc.port = port || doc.port
 
     await permissions.insert(doc, doc._id)
 
 }
 
-async function find_roles(path){
+async function find_service(path){
     const q = {
         selector: {
             path: path
         },
-            fields: ["roles"],
+            fields: ["roles", "host", "port"],
         limit:1
     };
     const permissions = nano.db.use('permissions');
     const response = await permissions.find(q)
-    return response.docs[0].roles
+    console.log(path, response)
+    return response.docs[0]
 }
 
 async function requireDynamicRoles(req, res, next){
         try{
-            let roles = await find_roles(req.path);
-            res.locals.roles = roles;
+            let roles = (await find_service(req.internal_path)).roles;
+            console.log(roles)
             superlogin.requireAnyRole(roles)(req, res, next)
             console.log("calling next")
             //next() // next is called by requireAnyRole het
@@ -86,35 +89,38 @@ async function requireDynamicRoles(req, res, next){
         }
 }
 
-async function proxy(req, res, next){
-    let body =  (await axios.get('https://dog.ceo/api/breeds/list/all')).data
+
+async function proxy (req, res, next){
+    let service = await find_service(req.internal_path)
+    let path2 = `${service.host}:${service.port}`
+    console.log(`${req.path} -> ${path2}`)
+    let body = (await axios.get(path2)).data
     res.send(body)
 }
+
+
+function remove_prefix(prefix){
+    return async (req, res, next) => {
+        req.internal_path = req.path.replace(prefix, "")
+        next()
+    }
+}
+
+
 // Initialize SuperLogin
 var superlogin = new SuperLogin(config);
 
 // Mount SuperLogin's routes to our app
 app.use('/auth', superlogin.router);
 
-app.get('/admin', superlogin.requireAuth, superlogin.requireAnyRole(['admin']),
-    function(req, res, ) {
-        res.send('Welcome Admin');
-    });
 
 
-app.get('/dynamic', superlogin.requireAuth, requireDynamicRoles,    
-    function(req, res) {
-        console.log("js")
-        res.send(`${req.path} Authorized`);
-    });
+app.get('/proxy/*', superlogin.requireAuth, remove_prefix("/proxy"), requireDynamicRoles, proxy)
 
-app.get('/user', superlogin.requireAuth, superlogin.requireAnyRole(['moderator']), proxy)
-app.get('/service', superlogin.requireAuth, requireDynamicRoles, proxy)
-
-app.put("/permission", async function(req, res) {
+app.put("/service", async function(req, res) {
     const body = req.body;
     try{
-        await update_permission(body.path, body.roles)
+        await update_service(body.deployment, body.host, body.port, body.path, body.roles)
         res.send(201)
     }
     catch{

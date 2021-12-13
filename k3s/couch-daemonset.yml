@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: couch-deployment
+  labels:
+    tier: osmotic-agent
+    app: osmotic-proxy
+
+spec:
+  selector:
+    matchLabels:
+      tier: osmotic-agent
+  template:
+    metadata:
+      name: couchdb
+      labels:
+        tier: osmotic-agent
+    spec:
+      tolerations:
+        # this toleration is to have the daemonset runnable on master nodes
+        # remove it if your masters can't run pods
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+#      volumes:
+#        - name: volume
+#          persistentVolumeClaim:
+#            claimName: volumeclaim
+      containers:
+        - name: couchdb
+          image: couchdb:3.2
+          env:
+            - name: COUCHDB_USER
+              value: admin
+            - name: COUCHDB_PASSWORD
+              value: Fcrlab2021@
+          ports:
+            - name: couchdb
+              containerPort: 5984
+#          volumeMounts:
+#            - name: volume
+#              mountPath: /opt/couchdb/data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: couch-service
+spec:
+  type: NodePort
+  selector:
+    tier: osmotic-agent
+  ports:
+      - port: 5984
+        targetPort: 5984
