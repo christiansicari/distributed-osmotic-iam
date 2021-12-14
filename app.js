@@ -19,7 +19,7 @@ const config = {
         protocol: 'http://',
         host: 'localhost:5984',
         user: 'admin',
-        password: 'Fcrlab2021!',
+        password: 'password',
         userDB: 'sl-users',
         couchAuthDB: '_users'
     },

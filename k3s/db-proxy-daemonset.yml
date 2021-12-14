@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: proxy-db
+  labels:
+    app: odistributed-iam
+    name: proxy-db-daemonset
+spec:
+  selector:
+    matchLabels:
+      app: distributed-iam
+      name: proxy-db
+
+  template:
+    metadata:
+      labels:
+        app: distributed-iam
+        name: proxy-db
+    spec:
+      tolerations:
+        # this toleration is to have the daemonset runnable on master nodes
+        # remove it if your masters can't run pods
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - image: couchdb:3.2
+          name: db
+          env:
+            - name: COUCHDB_USER
+              value: admin
+            - name: COUCHDB_PASSWORD
+              value: password
+        - name: init-db
+          image: curlimages/curl
+          command: [ 'sh', '-c', "sleep 3s; curl -X PUT http://admin:password@127.0.0.1:5984/_users ; curl -X PUT http://admin:password@127.0.0.1:5984/_replicator; exit 0;" ]
+        - image: christiansicari/distributed-iam:latest
+          name: distributed-iam
+          ports:
+            - name: proxy
+              containerPort: 8080
+
