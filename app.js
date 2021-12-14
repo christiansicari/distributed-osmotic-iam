@@ -1,27 +1,42 @@
 var express = require('express');
 var http = require('http');
 var bodyParser = require('body-parser');
-var logger = require('morgan');
 var { SuperLogin } = require('@sl-nx/superlogin-next');
-const nano = require('nano')('http://admin:Fcrlab2021!@pi1:5984');
+const { exec } = require('child_process');
+const shell = require('shelljs')
+var logger = require('morgan');
+var request = require('request');
 
+const dbUser = "admin"
+const dbPassword = "password"
+const dbHost = "localhost"
+const dbPort = "5984"
+const initProxy = require("./initProxy")
+const nano = require('nano')(`http://${dbUser}:${dbPassword}@${dbHost}:${dbPort}`);
 const axios = require("axios");
-const {parseHost} = require("express-http-proxy/lib/requestOptions");
-
-var app = express();
-app.set('port', process.env.PORT || 3000);
-app.use(logger('dev'));
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: false }));
 const port = 8080;
 const config = {
     dbServer: {
         protocol: 'http://',
-        host: 'localhost:5984',
-        user: 'admin',
-        password: 'password',
+        host: `${dbHost}:${dbPort}`,
+        user: dbUser,
+        password: dbPassword,
         userDB: 'sl-users',
         couchAuthDB: '_users'
+    },
+    local: {
+        // Send out a confirm email after each user signs up with local login
+        sendConfirmEmail: false,
+        // Require the email be confirmed before the user can login
+        requireEmailConfirm: false,
+        // If this is set, the user will be redirected to this location after confirming email instead of JSON response
+        confirmEmailRedirectURL: '/',
+        // Set this to true to disable usernames and use emails instead
+        emailUsername: false,
+        // Custom names for the username and password fields in your sign-in form
+        usernameField: 'user',
+        passwordField: 'pass',
+        // Override default constraints
     },
     mailer: {
         fromEmail: 'gmail.user@gmail.com',
@@ -51,12 +66,21 @@ async function update_service(deployment, host, port, path, roles)
     };
     const permissions = nano.db.use('permissions');
     const response = await permissions.find(q)
-
-    const doc = response.docs[0]
-    console.log(doc)
-    doc.roles = roles || doc.roles
-    doc.host = host || doc.host
-    doc.port = port || doc.port
+    console.log(response.docs)
+    let doc = {}
+    if( response.docs.length > 0){
+        doc = response.docs[0]
+        doc.roles = roles || doc.roles
+        doc.host = host || doc.host
+        doc.port = port || doc.port
+        doc.deployment = deployment || doc.deployment
+    }
+    else{
+        doc.roles = roles
+        doc.host = host
+        doc.port = port
+        doc.deployment = deployment
+    }
 
     await permissions.insert(doc, doc._id)
 
@@ -106,32 +130,46 @@ function remove_prefix(prefix){
     }
 }
 
+function onListening(){
 
-// Initialize SuperLogin
-var superlogin = new SuperLogin(config);
+    console.log("Init Proxy")
+    initProxy.regUser()
+    initProxy.regService()
 
+}
+async function runApp(){
+    var app = express();
+    app.use(logger('dev'));
+
+    app.use(bodyParser.json());
+    app.use(bodyParser.urlencoded({ extended: false }));
+    var superlogin = new SuperLogin(config);
 // Mount SuperLogin's routes to our app
-app.use('/auth', superlogin.router);
+    app.use('/auth', superlogin.router);
 
+    app.get('/proxy/*', superlogin.requireAuth, remove_prefix("/proxy"), requireDynamicRoles, proxy)
 
+    app.put("/service", async function(req, res) {
+        const body = req.body;
+        try{
+            await update_service(body.deployment, body.host, body.port, body.path, body.roles)
+            res.send(201)
+        }
+        catch (error){
+            console.error(error);
+            res.status(500)
+            res.send("error")
+        }
+    })
 
-app.get('/proxy/*', superlogin.requireAuth, remove_prefix("/proxy"), requireDynamicRoles, proxy)
+    return app.listen(port, async () => {
+        console.log(`Example app listening at http://localhost:${port}`);
 
-app.put("/service", async function(req, res) {
-    const body = req.body;
-    try{
-        await update_service(body.deployment, body.host, body.port, body.path, body.roles)
-        res.send(201)
-    }
-    catch{
-        res.status(500)
-        res.send("error")
-    }
+    })
+}
+console.log("Init Database")
+shell.exec("./init-db.sh", {silent:true})
+runApp().then(() => {
+    setTimeout(onListening, 5000)
 })
 
-
-
-//http.createServer(app).listen(app.get('8080'));
-app.listen(port, () => {
-    console.log(`Example app listening at http://localhost:${port}`)
-})
