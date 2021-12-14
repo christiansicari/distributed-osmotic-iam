@@ -17,7 +17,7 @@ const port = 8080;
 const config = {
     dbServer: {
         protocol: 'http://',
-        host: 'pi1:5984',
+        host: 'localhost:5984',
         user: 'admin',
         password: 'Fcrlab2021!',
         userDB: 'sl-users',
