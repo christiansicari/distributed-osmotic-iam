@@ -1,7 +1,7 @@
 
 var axios = require('axios');
 
-function regUser() {
+async function regUser() {
 
   var data = JSON.stringify({
     "name": "Joe Smith",
@@ -19,17 +19,15 @@ function regUser() {
     },
     data: data
   };
-
-  axios(config)
-      .then(function (response) {
-        console.log(JSON.stringify(response.data));
-      })
-      .catch(function (error) {
-        console.log(error);
-      });
+  try {
+    await axios(config)
+  }
+  catch{
+    console.log("error registring user")
+  }
 }
 
-function regService(){
+async function regService() {
   var data = JSON.stringify({
     "host": "http://172.17.7.37",
     "port": 31099,
@@ -47,16 +45,15 @@ function regService(){
     headers: {
       'Content-Type': 'application/json'
     },
-    data : data
+    data: data
   };
 
-  axios(config)
-      .then(function (response) {
-        console.log(JSON.stringify(response.data));
-      })
-      .catch(function (error) {
-        console.log(error);
-      });
+  try {
+    await axios(config)
+  }
+  catch{
+    console.log("error registring service")
+  }
 }
 
-module.exports = {regUser, regService}
+module.exports = { regUser, regService }

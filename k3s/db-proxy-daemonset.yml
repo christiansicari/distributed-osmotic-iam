@@ -31,9 +31,6 @@ spec:
               value: admin
             - name: COUCHDB_PASSWORD
               value: password
-        - name: init-db
-          image: curlimages/curl
-          command: [ 'sh', '-c', "sleep 3s; curl -X PUT http://admin:password@127.0.0.1:5984/_users ; curl -X PUT http://admin:password@127.0.0.1:5984/_replicator; exit 0;" ]
         - image: christiansicari/distributed-iam:latest
           name: distributed-iam
           ports:

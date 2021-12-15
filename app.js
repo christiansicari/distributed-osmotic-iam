@@ -2,8 +2,6 @@ var express = require('express');
 var http = require('http');
 var bodyParser = require('body-parser');
 var { SuperLogin } = require('@sl-nx/superlogin-next');
-const { exec } = require('child_process');
-const shell = require('shelljs')
 var logger = require('morgan');
 var request = require('request');
 
@@ -12,6 +10,8 @@ const dbPassword = "password"
 const dbHost = "localhost"
 const dbPort = "5984"
 const initProxy = require("./initProxy")
+const initDB = require("./initDB")
+
 const nano = require('nano')(`http://${dbUser}:${dbPassword}@${dbHost}:${dbPort}`);
 const axios = require("axios");
 const port = 8080;
@@ -162,14 +162,34 @@ async function runApp(){
         }
     })
 
-    return app.listen(port, async () => {
-        console.log(`Example app listening at http://localhost:${port}`);
-
-    })
+    return app.listen(port, async () => {})
 }
-console.log("Init Database")
-shell.exec("./init-db.sh", {silent:true})
-runApp().then(() => {
-    setTimeout(onListening, 5000)
-})
 
+
+
+async function run(){
+    let isInit = false;
+    try{
+        isInit = await initDB.isInit(dbUser, dbPassword, dbHost, dbPort);
+    }
+    catch{
+        console.log("Unable to contact database, exit");
+        return;
+    }
+    if(! isInit){
+        console.log("Configure database")
+        await initDB.initCouchDB(dbUser, dbPassword, dbHost, dbPort);
+    }
+    else
+        console.log("System already configured")
+    await runApp()
+    if(!isInit){
+        console.log("Waiting 5 seconds")
+        await new Promise(r => setTimeout(r, 5000));
+        console.log("Configure Proxy")
+        onListening();
+    }
+}
+
+run()
+.then(() =>console.log(`Example app listening at http://localhost:${port}`))
