@@ -11,7 +11,6 @@ const dbHost = "localhost"
 const dbPort = "5984"
 const initProxy = require("./initProxy")
 const initDB = require("./initDB")
-
 const nano = require('nano')(`http://${dbUser}:${dbPassword}@${dbHost}:${dbPort}`);
 const axios = require("axios");
 const port = 8080;
@@ -56,6 +55,9 @@ const config = {
     }
 }
 
+async function testDB(){
+    await nano.info()
+}
 async function update_service(deployment, host, port, path, roles)
 {
     const q = {
@@ -166,16 +168,30 @@ async function runApp(){
 }
 
 
+let attempts = 100;
+async function wait_DB(){
+    let isDBset = false;
+    for(let i = 0; i < attempts && !isDBset; i++){
+        try{
+            await testDB();
+            isDBset = true;
+         }
+         catch{
+             console.log(`DB Connection attempt: ${i}/${attempts} failed, sleeping...`)
+            await new Promise(r => setTimeout(r, 5000));
+         }
+    }
+    if(!isDBset){
+        console.log("DB connection failed, exit");
+        throw "DB connection error"    
+    }
+    console.log("DB connection established")
 
+}
 async function run(){
+    await wait_DB();
     let isInit = false;
-    try{
-        isInit = await initDB.isInit(dbUser, dbPassword, dbHost, dbPort);
-    }
-    catch{
-        console.log("Unable to contact database, exit");
-        return;
-    }
+    isInit = await initDB.isInit(dbUser, dbPassword, dbHost, dbPort);
     if(! isInit){
         console.log("Configure database")
         await initDB.initCouchDB(dbUser, dbPassword, dbHost, dbPort);
@@ -193,3 +209,4 @@ async function run(){
 
 run()
 .then(() =>console.log(`Example app listening at http://localhost:${port}`))
+.catch( err => console.log(err))
