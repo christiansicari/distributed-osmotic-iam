@@ -3,7 +3,7 @@ kind: DaemonSet
 metadata:
   name: proxy-db
   labels:
-    app: odistributed-iam
+    app: distributed-iam
     name: proxy-db-daemonset
 spec:
   selector:
@@ -33,6 +33,7 @@ spec:
               value: password
         - image: christiansicari/distributed-iam:latest
           name: distributed-iam
+          imagePullPolicy: Always
           ports:
             - name: proxy
               containerPort: 8080

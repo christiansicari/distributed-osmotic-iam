@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: distributed-iam-service
+  labels:
+    app: distributed-iam
+    name: distributed-iam-service
+
+spec:
+  selector:
+    app: distributed-iam
+    name: proxy-db
+  type: NodePort
+  ports:
+    - targetPort: 8080
+      port: 8080
+      nodePort: 30007
