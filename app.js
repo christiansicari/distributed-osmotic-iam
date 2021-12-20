@@ -12,6 +12,7 @@ const dbPort = "5984"
 const initProxy = require("./initProxy")
 const initDB = require("./initDB")
 const nano = require('nano')(`http://${dbUser}:${dbPassword}@${dbHost}:${dbPort}`);
+
 const axios = require("axios");
 const port = 8080;
 const config = {
@@ -72,9 +73,10 @@ async function update_service(deployment, host, port, path, roles)
     let doc = {}
     if( response.docs.length > 0){
         doc = response.docs[0]
-        doc.roles = roles || doc.roles
         doc.host = host || doc.host
         doc.port = port || doc.port
+        doc.path = path || doc.path
+        doc.roles = roles || doc.roles
         doc.deployment = deployment || doc.deployment
     }
     else{
@@ -87,6 +89,25 @@ async function update_service(deployment, host, port, path, roles)
     await permissions.insert(doc, doc._id)
 
 }
+
+
+async function get_all_documents(collection){
+    try{
+        const permissions = nano.db.use(collection);
+        let query = {
+            "selector": {
+                "_id": {
+                    "$exists": true
+                }
+            }
+        }
+        const response = (await permissions.find(query)).docs;
+        return response
+    }catch{
+        return []
+    }
+}
+
 
 async function find_service(path){
     const q = {
@@ -104,23 +125,26 @@ async function find_service(path){
 
 async function requireDynamicRoles(req, res, next){
         try{
+            console.log("Requiring Dynamic Roles")
             let roles = (await find_service(req.internal_path)).roles;
-            console.log(roles)
+            console.log("Roles found for given service", roles)
             superlogin.requireAnyRole(roles)(req, res, next)
-            console.log("calling next")
             //next() // next is called by requireAnyRole het
-        }catch {
+        }catch(error) {
             res.status(500);
-            res.send('Generic Error');
+            res.send('Error fetching service', error);
         }
 }
 
 
 async function proxy (req, res, next){
+    console.log("Starting proxy")
     let service = await find_service(req.internal_path)
+    console.log("service found", service)
     let path2 = `${service.host}:${service.port}`
     console.log(`${req.path} -> ${path2}`)
     let body = (await axios.get(path2)).data
+    console.log("sending content on", path2)
     res.send(body)
 }
 
@@ -149,6 +173,10 @@ async function runApp(){
 // Mount SuperLogin's routes to our app
     app.use('/auth', superlogin.router);
 
+    app.get("/db/:collection", async function(req, res, next){
+        let data = await get_all_documents(req.params.collection)
+        res.send(data)
+    })
     app.get('/proxy/*', superlogin.requireAuth, remove_prefix("/proxy"), requireDynamicRoles, proxy)
 
     app.put("/service", async function(req, res) {
@@ -203,7 +231,7 @@ async function run(){
         console.log("Waiting 5 seconds")
         await new Promise(r => setTimeout(r, 5000));
         console.log("Configure Proxy")
-        onListening();
+        //onListening();
     }
 }
 

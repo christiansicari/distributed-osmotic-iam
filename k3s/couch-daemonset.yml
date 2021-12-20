@@ -52,3 +52,5 @@ spec:
   ports:
       - port: 5984
         targetPort: 5984
+
+

@@ -1,22 +1,21 @@
 
-const nano = require('nano')('http://admin:Fcrlab2021!@pi1:5984');
+async function f(collection){
 
-async function update_permission(path, roles)
-{
-    const q = {
-        selector: {
-            path: path
-        },
-        limit: 1
-    };
-    const permissions = nano.db.use('permissions');
-    const response = await permissions.find(q)
-
-    const doc = response.docs[0]
-    console.log(doc)
-    doc.roles = roles
-
-    await permissions.insert(doc, doc._id)
-
+    const nano = require('nano')('http://admin:Fcrlab2021!@pi2:5984');
+    try{
+        const permissions = nano.db.use(collection);
+        let query = {
+            "selector": {
+                "_id": {
+                    "$exists": true
+                }
+            }
+        }
+        const response = (await permissions.find(query)).docs;
+        return response
+    }catch{
+        return []
     }
-f(["moderator"])
+}
+
+f()

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: headless-svc
+spec:
+  clusterIP: None
+  selector:
+    app: distributed-iam
+    name: proxy-db
+  ports:
+    - port: 5984
+      targetPort: 5984
