@@ -1,10 +1,9 @@
 var express = require('express');
 var http = require('http');
 var bodyParser = require('body-parser');
-var { SuperLogin } = require('@sl-nx/superlogin-next');
 var logger = require('morgan');
 var request = require('request');
-
+var superlogin;
 const dbUser = "admin"
 const dbPassword = "password"
 const dbHost = "localhost"
@@ -12,49 +11,9 @@ const dbPort = "5984"
 const initProxy = require("./initProxy")
 const initDB = require("./initDB")
 const nano = require('nano')(`http://${dbUser}:${dbPassword}@${dbHost}:${dbPort}`);
-
 const axios = require("axios");
 const port = 8080;
-const config = {
-    dbServer: {
-        protocol: 'http://',
-        host: `${dbHost}:${dbPort}`,
-        user: dbUser,
-        password: dbPassword,
-        userDB: 'sl-users',
-        couchAuthDB: '_users'
-    },
-    local: {
-        // Send out a confirm email after each user signs up with local login
-        sendConfirmEmail: false,
-        // Require the email be confirmed before the user can login
-        requireEmailConfirm: false,
-        // If this is set, the user will be redirected to this location after confirming email instead of JSON response
-        confirmEmailRedirectURL: '/',
-        // Set this to true to disable usernames and use emails instead
-        emailUsername: false,
-        // Custom names for the username and password fields in your sign-in form
-        usernameField: 'user',
-        passwordField: 'pass',
-        // Override default constraints
-    },
-    mailer: {
-        fromEmail: 'gmail.user@gmail.com',
-        options: {
-            service: 'Gmail', // N.B.: Gmail won't work out of the box, see https://nodemailer.com/usage/using-gmail/
-            auth: {
-                user: 'gmail.user@gmail.com',
-                pass: 'userpass'
-            }
-        }
-    },
-
-    userDBs: {
-        defaultDBs: {
-            private: ['supertest']
-        }
-    }
-}
+var md5 = require('md5');
 
 async function testDB(){
     await nano.info()
@@ -124,18 +83,72 @@ async function find_service(path){
     return response.docs[0]
 }
 
+
+async function find_user(email){
+    const q = {
+        selector: {
+            email: email
+        },
+        fields: ["roles", "email"],
+        limit:1
+    };
+    const permissions = nano.db.use('users');
+    const response = await permissions.find(q)
+    return response.docs[0]
+}
+
+
+
 async function requireDynamicRoles(req, res, next){
         try{
             console.log("Requiring Dynamic Roles")
-            let roles = (await find_service(req.internal_path)).roles;
-            console.log("Roles found for given service", roles)
-            superlogin.requireAnyRole(roles)(req, res, next)
+            let allowed_roles = (await find_service(req.internal_path)).roles;
+            let roles = (await find_user(req.email)).roles
+            if(allowed_roles.filter(value => roles.includes(value)).length > 0){
+                next()
+            }
+            else res.sendStatus(403)
+
+
             //next() // next is called by requireAnyRole het
         }catch(error) {
             res.status(500);
-            res.send(`Error fetching role for service ${error}` );
+            res.send(`Error on requireDynamicRoles ${error}` );
         }
 }
+
+async function register(req, res, next){
+    const users = nano.db.use('users');
+    let doc = {'email': req.body.email, hash: md5(req.body.password), roles: ['user']}
+    await users.insert(doc)
+    res.sendStatus(201)
+}
+function base64ToStr(str){
+    let buff = new Buffer(str, 'base64');
+    let text = buff.toString('utf-8');
+    return text
+
+}
+async function verify_user(req, res, next){
+    const users = nano.db.use('users');
+    let [email, password] = base64ToStr(req.headers.authorization.split("Basic ")[1]).split(":")
+    let query = {
+        "selector": {
+            "email": {"$eq": email},
+            "hash": {"$eq": md5(password)},
+
+            //"password": md5(password) //future works
+        }
+    }
+    const response = (await users.find(query)).docs;
+    if (response.length > 0){
+        console.log("User found")
+        req.email = email
+        next()
+    }
+    else res.sendStatus(401)
+}
+
 
 
 async function proxy (req, res, next){
@@ -171,16 +184,13 @@ async function runApp(){
 
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({ extended: false }));
-    superlogin = new SuperLogin(config);
 // Mount SuperLogin's routes to our app
-    app.use('/auth', superlogin.router);
 
     app.get("/db/:collection", async function(req, res, next){
         let data = await get_all_documents(req.params.collection)
-        res.send(data)
+        res.send({data: data} )
     })
-    app.get('/proxy/*', superlogin.requireAuth, remove_prefix("/proxy"), requireDynamicRoles, proxy)
-    app.get('/test', superlogin.requireAuth, remove_prefix("/proxy"), requireDynamicRoles, (req, res, next) => res.send("Funciona"))
+    app.get('/proxy/*', remove_prefix("/proxy"), verify_user, requireDynamicRoles, proxy)
 
     app.put("/service", async function(req, res) {
         const body = req.body;
@@ -194,6 +204,8 @@ async function runApp(){
             res.send("error")
         }
     })
+
+    app.post("/auth/register",register)
 
     return app.listen(port, async () => {})
 }

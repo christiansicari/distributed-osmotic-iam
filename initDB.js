@@ -21,7 +21,7 @@ async function initCouchDB(user, password, host, port){
         await axios(config);
         config.url = `${urlBase}/_replicator`,
         await axios(config);
-        config.url = `${urlBase}/sl-users`;
+        config.url = `${urlBase}/users`;
         await axios(config);
         config.url = `${urlBase}/permissions`,
         await axios(config);
