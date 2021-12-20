@@ -6,8 +6,8 @@ var logger = require('morgan');
 var request = require('request');
 
 const dbUser = "admin"
-const dbPassword = "Fcrlab2021!"
-const dbHost = "pi2"
+const dbPassword = "password"
+const dbHost = "localhost"
 const dbPort = "5984"
 const initProxy = require("./initProxy")
 const initDB = require("./initDB")
