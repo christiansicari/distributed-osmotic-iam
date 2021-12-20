@@ -6,8 +6,8 @@ var logger = require('morgan');
 var request = require('request');
 
 const dbUser = "admin"
-const dbPassword = "password"
-const dbHost = "localhost"
+const dbPassword = "Fcrlab2021!"
+const dbHost = "pi2"
 const dbPort = "5984"
 const initProxy = require("./initProxy")
 const initDB = require("./initDB")
@@ -133,7 +133,7 @@ async function requireDynamicRoles(req, res, next){
             //next() // next is called by requireAnyRole het
         }catch(error) {
             res.status(500);
-            res.send('Error fetching service', error);
+            res.send(`Error fetching role for service ${error}` );
         }
 }
 
@@ -142,10 +142,11 @@ async function proxy (req, res, next){
     console.log("Starting proxy")
     let service = await find_service(req.internal_path)
     console.log("service found", service)
-    let path2 = `${service.host}:${service.port}`
+    let path2 = `http://${service.host}:${service.port}`
     console.log(`${req.path} -> ${path2}`)
     let body = (await axios.get(path2)).data
-    console.log("sending content on", path2)
+    console.log("sending content on")
+    console.log(body)
     res.send(body)
 }
 
@@ -170,7 +171,7 @@ async function runApp(){
 
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({ extended: false }));
-    var superlogin = new SuperLogin(config);
+    superlogin = new SuperLogin(config);
 // Mount SuperLogin's routes to our app
     app.use('/auth', superlogin.router);
 
@@ -179,6 +180,7 @@ async function runApp(){
         res.send(data)
     })
     app.get('/proxy/*', superlogin.requireAuth, remove_prefix("/proxy"), requireDynamicRoles, proxy)
+    app.get('/test', superlogin.requireAuth, remove_prefix("/proxy"), requireDynamicRoles, (req, res, next) => res.send("Funciona"))
 
     app.put("/service", async function(req, res) {
         const body = req.body;
@@ -221,7 +223,7 @@ async function run(){
     await wait_DB();
     let isInit = false;
     isInit = await initDB.isInit(dbUser, dbPassword, dbHost, dbPort);
-    if(! isInit){
+    if(!isInit){
         console.log("Configure database")
         await initDB.initCouchDB(dbUser, dbPassword, dbHost, dbPort);
     }

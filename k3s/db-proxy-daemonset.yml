@@ -51,6 +51,8 @@ spec:
   ports:
     - port: 5984
       targetPort: 5984
+    - port: 8080
+      targetPort: 8080
 
 ---
 apiVersion: v1
