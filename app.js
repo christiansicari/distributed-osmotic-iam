@@ -80,9 +80,10 @@ async function update_service(deployment, host, port, path, roles)
         doc.deployment = deployment || doc.deployment
     }
     else{
-        doc.roles = roles
         doc.host = host
         doc.port = port
+        doc.path = path
+        doc.roles = roles
         doc.deployment = deployment
     }
 
